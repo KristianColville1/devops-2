@@ -1,0 +1,58 @@
+[
+  {
+    "id": "end-in-window-inclusive",
+    "nowWall": "2026-05-10 14:00:00",
+    "startEvents": [
+      {
+        "schedule_id": 1,
+        "post_id": 1,
+        "stream_id": "a",
+        "scheduled_start": "2026-05-10 13:30:00",
+        "scheduled_end": "2026-05-10 13:57:00"
+      }
+    ],
+    "expectedIds": [1]
+  },
+  {
+    "id": "end-at-now-included",
+    "nowWall": "2026-05-10 14:00:00",
+    "startEvents": [
+      {
+        "schedule_id": 2,
+        "post_id": 1,
+        "stream_id": "a",
+        "scheduled_start": "2026-05-10 13:30:00",
+        "scheduled_end": "2026-05-10 14:00:00"
+      }
+    ],
+    "expectedIds": [2]
+  },
+  {
+    "id": "end-just-before-window",
+    "nowWall": "2026-05-10 14:00:00",
+    "startEvents": [
+      {
+        "schedule_id": 3,
+        "post_id": 1,
+        "stream_id": "a",
+        "scheduled_start": "2026-05-10 13:00:00",
+        "scheduled_end": "2026-05-10 13:54:00"
+      }
+    ],
+    "expectedIds": []
+  },
+  {
+    "id": "end-after-now",
+    "nowWall": "2026-05-10 14:00:00",
+    "startEvents": [
+      {
+        "schedule_id": 4,
+        "post_id": 1,
+        "stream_id": "a",
+        "scheduled_start": "2026-05-10 13:30:00",
+        "scheduled_end": "2026-05-10 14:30:00"
+      }
+    ],
+    "expectedIds": []
+  }
+]
