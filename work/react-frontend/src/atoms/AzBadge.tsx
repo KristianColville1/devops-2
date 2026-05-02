@@ -1,3 +1,5 @@
-export function AzBadge({ az }) {
-  return <span className="tag is-info is-light is-small">{az}</span>
+import styles from './AzBadge.module.css'
+
+export function AzBadge({ az }: { az: string }) {
+  return <span className={styles.badge}>{az}</span>
 }

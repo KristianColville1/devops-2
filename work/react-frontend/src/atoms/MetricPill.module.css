@@ -4,6 +4,14 @@
   gap: 6px;
 }
 
+.icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
 .label {
   color: var(--text-secondary);
   font-size: 11px;

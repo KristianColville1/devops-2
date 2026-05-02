@@ -41,6 +41,10 @@ export class NodeRepository extends BaseRepository<NodeRecord> {
   }
 
   async listActive(): Promise<NodeRecord[]> {
-    return this.scanItems()
+    const now = Math.floor(Date.now() / 1000)
+    return this.scanItems({
+      FilterExpression: 'expiresAt > :now',
+      ExpressionAttributeValues: { ':now': now },
+    })
   }
 }

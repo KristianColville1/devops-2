@@ -1,3 +1,5 @@
-export function StatusDot({ status }) {
-  return <span className={`status-dot is-${status}`} />
+import styles from './StatusDot.module.css'
+
+export function StatusDot({ status }: { status: string }) {
+  return <span className={styles.dot} data-status={status} />
 }
