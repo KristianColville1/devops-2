@@ -4,6 +4,12 @@ services:
     ports:
       - "8000:8000"
     command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8000' 2>/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   node-backend:
     build:
@@ -19,7 +25,8 @@ services:
       DYNAMO_LOCAL: "true"
       AWS_REGION: "us-east-1"
     depends_on:
-      - dynamodb-local
+      dynamodb-local:
+        condition: service_healthy
     healthcheck:
       test:
         ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
