@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { useWsEvents, type WsStatus } from './useWsEvents'
 import type { NodeRecord } from '../types'
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000') as string
+// VITE_API_URL is set for local dev (http://localhost:3000).
+// In Docker the var is empty so we fall back to the current origin — nginx proxies /ws to the backend.
+const apiUrl = (import.meta.env.VITE_API_URL as string) || window.location.origin
 const token  = (import.meta.env.VITE_DASHBOARD_TOKEN ?? '') as string
 const wsUrl  = apiUrl.replace(/^http/, 'ws') + `/ws?token=${token}`
 

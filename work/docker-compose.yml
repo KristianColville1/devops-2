@@ -1,0 +1,61 @@
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/8000' 2>/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  node-backend:
+    build:
+      context: ./node-backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      AWS_REGION: "us-east-1"
+      DYNAMO_TABLE_NODES: "devops-nodes"
+      DYNAMO_ENDPOINT: "http://dynamodb-local:8000"
+      DYNAMO_LOCAL: "true"
+      REDIS_URL: "redis://redis:6379"
+      DASHBOARD_TOKEN: "${DASHBOARD_TOKEN:-dev-token}"
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./react-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_DASHBOARD_TOKEN: "${DASHBOARD_TOKEN:-dev-token}"
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      node-backend:
+        condition: service_healthy

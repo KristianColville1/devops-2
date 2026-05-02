@@ -5,6 +5,10 @@ import { NodeRepository } from '@/modules/Nodes/NodeRepository.js'
 
 const clients = new Set<any>()
 
+export function wsConnectionCount(): number {
+  return clients.size
+}
+
 function broadcast(msg: string): void {
   for (const ws of clients) {
     if (ws.readyState === 1) ws.send(msg)
