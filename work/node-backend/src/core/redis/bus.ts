@@ -1,7 +1,7 @@
 import { env } from '@/core/env.js'
 import { getSubscriber } from './client.js'
 
-const CHANNELS = ['infra:events', 'infra:heartbeats', 'infra:requests']
+const CHANNELS = ['infra:events', 'infra:heartbeats', 'infra:requests', 'chat:global']
 
 export async function startBus(broadcast: (msg: string) => void): Promise<void> {
   if (!env('REDIS_URL')) return

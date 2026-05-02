@@ -4,6 +4,9 @@
   gap: 16px;
   padding: 28px 24px;
   align-items: flex-start;
+  flex: 1;
+  overflow-y: auto;
+  align-content: flex-start;
 }
 
 .empty {
@@ -15,6 +18,8 @@
   padding: 100px 24px;
   color: var(--text-secondary);
   font-size: 14px;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .emptyIcon {

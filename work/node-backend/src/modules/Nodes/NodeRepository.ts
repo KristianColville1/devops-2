@@ -23,6 +23,7 @@ export class NodeRepository extends BaseRepository<NodeRecord> {
       new UpdateCommand({
         TableName: this.tableName,
         Key: { instanceId },
+        ConditionExpression: 'attribute_exists(instanceId)',
         UpdateExpression:
           'SET lastSeen = :lastSeen, memoryPct = :memoryPct, cpuPct = :cpuPct, wsConnections = :wsConnections, expiresAt = :expiresAt',
         ExpressionAttributeValues: {

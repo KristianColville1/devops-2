@@ -1,11 +1,12 @@
 import { FiActivity } from 'react-icons/fi'
 import { ConnectionBanner } from '../molecules/ConnectionBanner'
 import { NodeGrid } from '../organisms/NodeGrid'
+import { ChatPanel } from '../molecules/ChatPanel'
 import { useNodes } from '../hooks/useNodes'
 import styles from './Dashboard.module.css'
 
 export function Dashboard() {
-  const { nodes, wsStatus } = useNodes()
+  const { nodes, wsStatus, messages, sendMessage } = useNodes()
 
   return (
     <div className={styles.page}>
@@ -18,7 +19,10 @@ export function Dashboard() {
         <ConnectionBanner status={wsStatus} />
       </header>
 
-      <NodeGrid nodes={nodes} />
+      <div className={styles.body}>
+        <NodeGrid nodes={nodes} />
+        <ChatPanel messages={messages} onSend={sendMessage} />
+      </div>
     </div>
   )
 }

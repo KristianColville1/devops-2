@@ -1,6 +1,7 @@
 import websocket from '@fastify/websocket'
 import { env } from '@/core/env.js'
 import { startBus } from '@/core/redis/bus.js'
+import { getHistory } from '@/core/redis/history.js'
 import { NodeRepository } from '@/modules/Nodes/NodeRepository.js'
 
 const clients = new Set<any>()
@@ -31,10 +32,10 @@ export async function registerWsServer(app: any): Promise<void> {
 
     clients.add(socket)
 
-    repo.listActive()
-      .then((nodes) => {
+    Promise.all([repo.listActive(), getHistory()])
+      .then(([nodes, messages]) => {
         if (socket.readyState === 1) {
-          socket.send(JSON.stringify({ event: 'snapshot', data: { nodes } }))
+          socket.send(JSON.stringify({ event: 'snapshot', data: { nodes, messages } }))
         }
       })
       .catch((err) => app.log.error(err, 'ws snapshot failed'))
