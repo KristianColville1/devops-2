@@ -1,0 +1,50 @@
+@import 'bulma/css/bulma.min.css';
+
+/* Appear animation for node cards */
+@keyframes card-appear {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+.node-card {
+  animation: card-appear 0.25s ease;
+  width: 280px;
+}
+
+/* Pulsing dot for connecting/reconnecting states */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.is-active    { background: #3fb950; box-shadow: 0 0 5px #3fb950; }
+.status-dot.is-inactive  { background: #f85149; }
+.status-dot.is-connected { background: #3fb950; box-shadow: 0 0 5px #3fb950; }
+.status-dot.is-connecting,
+.status-dot.is-reconnecting {
+  background: #d29922;
+  animation: status-pulse 1.4s ease-in-out infinite;
+}
+
+/* Metric row layout */
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.metric-label {
+  font-size: 0.7rem;
+  width: 32px;
+  flex-shrink: 0;
+  color: var(--bulma-text-weak);
+}

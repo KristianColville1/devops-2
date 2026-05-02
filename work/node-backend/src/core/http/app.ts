@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import { env } from '@/core/env.js'
 import { bootstrapDb } from '@/core/db/index.js'
+import { registerWsServer } from '@/core/ws/server.js'
 import '@/core/http/routing/controllerImports.js'
 import { registerOpenApi } from '@/core/http/openapi.js'
 import { registerDecoratedControllers } from '@/core/http/routing/registerDecoratedControllers.js'
@@ -17,6 +18,7 @@ export async function buildApp() {
   })
 
   await bootstrapDb()
+  await registerWsServer(app)
   await registerOpenApi(app)
   await registerDecoratedControllers(app)
   await registerHealthRoutes(app)

@@ -1,0 +1,39 @@
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.track {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent-green);
+  transition: width 0.5s ease;
+}
+
+.fill[data-high='true'] {
+  background: var(--accent-yellow);
+}
+
+.value {
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: 30px;
+  text-align: right;
+  flex-shrink: 0;
+}
