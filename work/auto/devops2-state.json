@@ -6,5 +6,9 @@
   "pem_file": "devops2-key.pem",
   "dynamo_table": "devops-nodes",
   "ami_id": "ami-085d6175714c48fd5",
-  "ami_name": "kc-2026-05-03-163327"
+  "ami_name": "kc-2026-05-03-163327",
+  "redis_cluster_id": "devops2-redis",
+  "redis_sg_id": "sg-0a3eaf3b61b9ff975",
+  "redis_endpoint": "devops2-redis.aw5mwn.0001.use1.cache.amazonaws.com",
+  "redis_url": "redis://devops2-redis.aw5mwn.0001.use1.cache.amazonaws.com:6379"
 }

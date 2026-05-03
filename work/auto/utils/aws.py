@@ -17,3 +17,13 @@ def ec2_resource():
 def dynamo_client():
     """Return a boto3 DynamoDB client for the configured region."""
     return boto3.client("dynamodb", region_name=REGION)
+
+
+def elasticache_client():
+    """Return a boto3 ElastiCache client for the configured region."""
+    return boto3.client("elasticache", region_name=REGION)
+
+
+def s3_client():
+    """Return a boto3 S3 client for the configured region."""
+    return boto3.client("s3", region_name=REGION)
