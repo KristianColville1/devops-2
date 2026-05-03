@@ -8,9 +8,9 @@ from . import config
 
 
 def install_node(ip):
-    """Install Node.js 20 via NodeSource. Binary lands at /usr/bin/node."""
-    print("1/5 Installing Node.js 20...")
-    ssh.run(ip, config.PEM_FILE, "curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash - && sudo yum install -y nodejs")
+    """Install Node.js 22 via NodeSource. Binary lands at /usr/bin/node."""
+    print("1/5 Installing Node.js 22...")
+    ssh.run(ip, config.PEM_FILE, "curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash - && sudo yum install -y nodejs")
     # confirm the binary is where systemd will look for it
     ssh.run(ip, config.PEM_FILE, "node --version && npm --version")
 

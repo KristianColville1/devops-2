@@ -1,0 +1,7 @@
+{
+  "master_instance_id": "i-038be14daf47c3955",
+  "master_sg_id": "sg-0311fc56cddda3f0f",
+  "master_public_ip": "100.27.229.164",
+  "key_name": "devops2-key",
+  "pem_file": "devops2-key.pem"
+}
