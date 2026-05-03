@@ -15,6 +15,8 @@ from utils import aws, state
 
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+
 KEY_NAME = os.environ.get("KEY_NAME", "devops2-key")
 PEM_FILE = os.environ.get("PEM_FILE", f"{KEY_NAME}.pem")
 BASE_AMI = os.environ.get("BASE_AMI_ID", "ami-02dfbd4ff395f2a1b")
@@ -30,6 +32,9 @@ BACKEND_PATH = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "node-backend")
 )
 
+# ---------------------------------------------------------------------------
+# EC2 provisioning
+
 
 def get_default_vpc():
     """Return the default VPC ID for the configured region."""
@@ -41,7 +46,7 @@ def get_default_vpc():
 
 
 def create_key_pair():
-    """Create a new key pair in AWS or import an existing local one."""
+    """Create a new key pair in AWS, or import an existing local one."""
     client = aws.ec2_client()
     pub_path = PEM_FILE + ".pub"
 
@@ -65,13 +70,19 @@ def create_key_pair():
     except ClientError as e:
         if e.response["Error"]["Code"] != "InvalidKeyPair.Duplicate":
             raise
-        print(f"  key pair: {KEY_NAME} (already in AWS, no local .pem)")
+        # Key exists in AWS but we have no local .pem — SSH will fail later without it
+        if not os.path.isfile(PEM_FILE):
+            raise RuntimeError(
+                f"Key pair '{KEY_NAME}' already exists in AWS but {PEM_FILE} not found locally. "
+                "Restore the .pem or delete the key from AWS and re-run."
+            ) from None
+        print(f"  key pair: {KEY_NAME} (already in AWS)")
 
     return KEY_NAME
 
 
 def create_security_group(vpc_id):
-    """Create an SG with SSH and the app port open. Skips creation if it exists."""
+    """Create an SG with SSH and the app port open. Skips creation if it already exists."""
     client = aws.ec2_client()
 
     existing = client.describe_security_groups(
@@ -126,9 +137,13 @@ def launch_instance(key_name, sg_id):
     return instances[0]
 
 
+# ---------------------------------------------------------------------------
+# Remote setup
+
+
 def _ssh(ip, cmd, check=True):
     """Run a shell command on the instance, streaming output to the terminal."""
-    return subprocess.run(
+    result = subprocess.run(
         [
             "ssh", "-i", PEM_FILE,
             "-o", "StrictHostKeyChecking=no",
@@ -138,8 +153,11 @@ def _ssh(ip, cmd, check=True):
             f"ec2-user@{ip}",
             cmd,
         ],
-        check=check,
-    ).returncode == 0
+        check=False,
+    )
+    if check and result.returncode != 0:
+        raise RuntimeError(f"Remote command failed (exit {result.returncode}): {cmd[:100]}")
+    return result.returncode == 0
 
 
 def wait_for_ssh(ip):
@@ -161,42 +179,54 @@ def wait_for_ssh(ip):
             return
         print(".", end="", flush=True)
         time.sleep(15)
-    raise RuntimeError("SSH never became available — check instance and SG")
+    raise RuntimeError("SSH never became available — check the instance console and SG rules")
 
 
 def install_node(ip):
     """Install Node.js 20 via NodeSource. Binary lands at /usr/bin/node."""
     print("1/5 Installing Node.js 20...")
     _ssh(ip, "curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash - && sudo yum install -y nodejs")
+    # confirm the binary is where systemd will look for it
+    _ssh(ip, "node --version && npm --version")
 
 
 def copy_backend(ip):
-    """Rsync the backend source to ~/app, skipping build artifacts."""
+    """Rsync the backend source to ~/app on the instance, skipping build artifacts."""
     print("2/5 Copying backend...")
     if not os.path.isdir(BACKEND_PATH):
         raise RuntimeError(f"Backend not found at {BACKEND_PATH}")
-    subprocess.run(
-        [
-            "rsync", "-az", "--progress",
-            "--exclude=node_modules/",
-            "--exclude=dist/",
-            "--exclude=.env",
-            "-e", f"ssh -i {PEM_FILE} -o StrictHostKeyChecking=no -o BatchMode=yes",
-            f"{BACKEND_PATH}/",
-            f"ec2-user@{ip}:~/app/",
-        ],
-        check=True,
-    )
+    if not os.path.isfile(PEM_FILE):
+        raise RuntimeError(f"{PEM_FILE} not found — rsync won't be able to authenticate")
+    try:
+        subprocess.run(
+            [
+                "rsync", "-az", "--progress",
+                "--exclude=node_modules/",
+                "--exclude=dist/",
+                "--exclude=.env",
+                "-e", f"ssh -i {PEM_FILE} -o StrictHostKeyChecking=no -o BatchMode=yes",
+                f"{BACKEND_PATH}/",
+                f"ec2-user@{ip}:~/app/",
+            ],
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"rsync failed (exit {e.returncode}) — confirm rsync is installed and SSH is reachable"
+        ) from None
 
 
 def build_backend(ip):
     """Install deps, compile TypeScript, then strip devDeps to keep the AMI lean."""
     print("3/5 Building backend...")
-    _ssh(ip, "cd ~/app && npm install && npm run build && npm prune --production")
+    _ssh(ip, "cd ~/app && npm install")
+    _ssh(ip, "cd ~/app && npm run build")
+    # devDeps (TypeScript, tsx, etc.) not needed at runtime
+    _ssh(ip, "cd ~/app && npm prune --production")
 
 
 def write_env(ip):
-    """Write base env vars to the instance. Instance-specific secrets come from the launch template."""
+    """Write base env vars to ~/app/.env. Instance-specific values come from the launch template."""
     print("4/5 Writing .env...")
     content = "\n".join([
         f"PORT={APP_PORT}",
@@ -208,9 +238,11 @@ def write_env(ip):
         # REDIS_URL and EC2_* are injected at boot by the launch template user data
         f"DASHBOARD_TOKEN={DASHBOARD_TOKEN}",
     ]) + "\n"
-    # base64 avoids any quoting issues when piping to a remote file
+    # base64 avoids any quoting issues piping multi-line content over SSH
     encoded = base64.b64encode(content.encode()).decode()
     _ssh(ip, f"echo {encoded} | base64 -d > ~/app/.env")
+    # make sure the file actually landed
+    _ssh(ip, "test -s ~/app/.env || (echo '.env is empty or missing' && exit 1)")
 
 
 def setup_service(ip):
@@ -225,7 +257,7 @@ def setup_service(ip):
         "Type=simple",
         "User=ec2-user",
         f"WorkingDirectory={APP_DIR}",
-        # EnvironmentFile with leading dash means systemd won't fail if the file is missing
+        # leading dash means systemd won't fail if .env is missing on first boot
         f"EnvironmentFile=-{APP_DIR}/.env",
         f"ExecStart=/usr/bin/node {APP_DIR}/dist/server.js",
         "Restart=on-failure",
@@ -244,6 +276,16 @@ def setup_service(ip):
         " && sudo systemctl enable devops2"
         " && sudo systemctl start devops2"
     ))
+    time.sleep(3)
+    running = _ssh(ip, "sudo systemctl is-active --quiet devops2", check=False)
+    if running:
+        print("  service: active")
+    else:
+        print("  warning: service may not have started — check with: journalctl -u devops2 -n 30")
+
+
+# ---------------------------------------------------------------------------
+# Entry point
 
 
 def main():
@@ -263,6 +305,12 @@ def main():
     instance.reload()
 
     public_ip = instance.public_ip_address
+    if not public_ip:
+        raise RuntimeError(
+            f"Instance {instance.id} has no public IP — "
+            "check that auto-assign public IPv4 is enabled on the default subnet"
+        )
+
     state.update(
         master_instance_id=instance.id,
         master_sg_id=sg_id,
