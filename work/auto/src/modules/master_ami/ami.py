@@ -17,7 +17,7 @@ def bake_ami(instance_id):
         r = client.create_image(
             InstanceId=instance_id,
             Name=name,
-            Description=f"devops2 master — {name}",
+            Description=f"devops2 master - {name}",
             # NoReboot means we don't stop the instance first — fine for a master bake
             NoReboot=True,
         )

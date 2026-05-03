@@ -2,3 +2,5 @@
 .env
 docs/notes/
 .~lock*
+devops2-key.pem
+devops2-key.pem.pub
