@@ -1,4 +1,5 @@
 import Fastify from 'fastify'
+import cors from '@fastify/cors'
 import { env } from '@/core/env.js'
 import { bootstrapDb } from '@/core/db/index.js'
 import { registerWsServer } from '@/core/ws/server.js'
@@ -17,6 +18,7 @@ export async function buildApp() {
     connectionTimeout,
   })
 
+  await app.register(cors, { origin: '*' })
   await bootstrapDb()
   await registerWsServer(app)
   await registerOpenApi(app)

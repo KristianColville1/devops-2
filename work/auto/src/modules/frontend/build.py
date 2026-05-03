@@ -15,12 +15,18 @@ def build(api_url=None, dashboard_token=None):
     if not os.path.isdir(FRONTEND_PATH):
         raise RuntimeError(f"Frontend not found at {FRONTEND_PATH}")
 
-    # Fall back to state then env if args not provided
-    api_url = api_url or state.get("master_public_ip") and f"http://{state.get('master_public_ip')}:3000"
-    dashboard_token = dashboard_token or os.environ.get("DASHBOARD_TOKEN", "dev-token-change-me")
-
+    # Prefer ALB DNS (port 80) over direct EC2 IP (port 3000)
     if not api_url:
-        raise RuntimeError("No API URL — pass one or run 01_create_master.py first")
+        alb = state.get("alb_dns")
+        ip  = state.get("master_public_ip")
+        if alb:
+            api_url = f"http://{alb}"
+        elif ip:
+            api_url = f"http://{ip}:3000"
+        else:
+            raise RuntimeError("No API URL — run 05_deploy_cloudformation.py or 01_create_master.py first")
+
+    dashboard_token = dashboard_token or os.environ.get("DASHBOARD_TOKEN", "dev-token-change-me")
 
     print(f"  api url: {api_url}")
     print(f"  building frontend...")

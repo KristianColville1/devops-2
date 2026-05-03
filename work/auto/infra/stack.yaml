@@ -1,0 +1,316 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  devops2 - Application Load Balancer, Auto Scaling Group, and step scaling
+  policies driven by ALB RequestCountPerTarget.
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: Baked AMI from 01_create_master.py --bake
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: devops2-key
+    Description: EC2 key pair for SSH access
+
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues: [t2.micro, t2.small, t3.micro, t3.small]
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Default VPC ID
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least two public subnets in different AZs for the ALB
+
+  RedisUrl:
+    Type: String
+    Description: ElastiCache Redis URL (redis://host:6379)
+
+  DynamoTable:
+    Type: String
+    Default: devops-nodes
+
+  DashboardToken:
+    Type: String
+    NoEcho: true
+    Default: dev-token-change-me
+
+  AppPort:
+    Type: Number
+    Default: 3000
+
+  MinInstances:
+    Type: Number
+    Default: 1
+
+  MaxInstances:
+    Type: Number
+    Default: 10
+
+  DesiredInstances:
+    Type: Number
+    Default: 2
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # --- Security Groups ------------------------------------------------------
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB - allow HTTP from internet
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: devops2-alb-sg
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: App instances - allow traffic from ALB and SSH
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        # Only the ALB can reach the backend port
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+        # SSH for debugging
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: devops2-app-sg
+
+  # --- Load Balancer --------------------------------------------------------
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: devops2-alb
+      Scheme: internet-facing
+      Type: application
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets: !Ref SubnetIds
+      Tags:
+        - Key: Name
+          Value: devops2-alb
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: devops2-tg
+      Port: !Ref AppPort
+      Protocol: HTTP
+      TargetType: instance
+      VpcId: !Ref VpcId
+      HealthCheckPath: /health
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      # Stickiness so WebSocket clients reconnect to the same instance
+      TargetGroupAttributes:
+        - Key: stickiness.enabled
+          Value: 'true'
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: '86400'
+      Tags:
+        - Key: Name
+          Value: devops2-tg
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # --- Compute (Launch Template + ASG) -------------------------------------
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: devops2-lt
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyName
+        IamInstanceProfile:
+          Name: LabInstanceProfile
+        SecurityGroupIds:
+          - !Ref AppSecurityGroup
+        # Inject dynamic values that weren't in the AMI at bake time
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            ENV_FILE=/home/ec2-user/app/.env
+
+            upsert_env() {
+              local key=$1 val=$2
+              if grep -q "^${!key}=" "$ENV_FILE" 2>/dev/null; then
+                sed -i "s|^${!key}=.*|${!key}=${!val}|" "$ENV_FILE"
+              else
+                echo "${!key}=${!val}" >> "$ENV_FILE"
+              fi
+            }
+
+            upsert_env REDIS_URL          "${RedisUrl}"
+            upsert_env DYNAMO_TABLE_NODES "${DynamoTable}"
+            upsert_env DASHBOARD_TOKEN    "${DashboardToken}"
+
+            systemctl enable crond
+            systemctl start crond
+            systemctl enable devops2
+            systemctl restart devops2
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: Listener
+    Properties:
+      AutoScalingGroupName: devops2-asg
+      MinSize: !Sub '${MinInstances}'
+      MaxSize: !Sub '${MaxInstances}'
+      DesiredCapacity: !Sub '${DesiredInstances}'
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      VPCZoneIdentifier: !Ref SubnetIds
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 120
+      Tags:
+        - Key: Name
+          Value: devops2-node
+          PropagateAtLaunch: true
+
+  # --- Step Scaling Policies ------------------------------------------------
+
+  ScaleOutPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyName: devops2-scale-out
+      PolicyType: StepScaling
+      AdjustmentType: ChangeInCapacity
+      MetricAggregationType: Average
+      # Step 1: moderate load  → add 1 instance
+      # Step 2: heavy load     → add 2 instances
+      StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          MetricIntervalUpperBound: 50
+          ScalingAdjustment: 1
+        - MetricIntervalLowerBound: 50
+          ScalingAdjustment: 2
+
+  ScaleInPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref AutoScalingGroup
+      PolicyName: devops2-scale-in
+      PolicyType: StepScaling
+      AdjustmentType: ChangeInCapacity
+      MetricAggregationType: Average
+      StepAdjustments:
+        - MetricIntervalUpperBound: 0
+          ScalingAdjustment: -1
+
+  # --- CloudWatch Alarms ----------------------------------------------------
+
+  HighRequestAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: devops2-high-requests
+      AlarmDescription: Request count per target high — scale out
+      Namespace: AWS/ApplicationELB
+      MetricName: RequestCountPerTarget
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      # Fire when requests/target/minute >= 100
+      Threshold: 100
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: TargetGroup
+          Value: !GetAtt TargetGroup.TargetGroupFullName
+      AlarmActions:
+        - !Ref ScaleOutPolicy
+      TreatMissingData: notBreaching
+
+  LowRequestAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: devops2-low-requests
+      AlarmDescription: Request count per target low — scale in
+      Namespace: AWS/ApplicationELB
+      MetricName: RequestCountPerTarget
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      # Fire when requests/target/5min < 20 for two consecutive periods
+      Threshold: 20
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: TargetGroup
+          Value: !GetAtt TargetGroup.TargetGroupFullName
+      AlarmActions:
+        - !Ref ScaleInPolicy
+      TreatMissingData: notBreaching
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+
+  LoadBalancerDNS:
+    Description: ALB public DNS — use this as VITE_API_URL when rebuilding frontend
+    Value: !GetAtt LoadBalancer.DNSName
+    Export:
+      Name: devops2-alb-dns
+
+  TargetGroupArn:
+    Value: !Ref TargetGroup
+    Export:
+      Name: devops2-tg-arn
+
+  AutoScalingGroupName:
+    Value: !Ref AutoScalingGroup
+    Export:
+      Name: devops2-asg-name
+
+  AppSecurityGroupId:
+    Description: SG attached to ASG instances — must be authorised in the Redis SG
+    Value: !Ref AppSecurityGroup
+    Export:
+      Name: devops2-app-sg-id
+
+  ScaleOutPolicyArn:
+    Value: !Ref ScaleOutPolicy
+
+  ScaleInPolicyArn:
+    Value: !Ref ScaleInPolicy

@@ -11,7 +11,7 @@ from utils.dotenv import load_dotenv
 from utils import state, ssh
 from src.modules.master_ami import config
 from src.modules.master_ami.ec2 import get_default_vpc, create_key_pair, create_security_group, launch_instance
-from src.modules.master_ami.setup import install_node, copy_backend, build_backend, write_env, setup_service
+from src.modules.master_ami.setup import install_node, copy_backend, build_backend, write_env, setup_metrics_cron, setup_service
 from src.modules.master_ami.ami import bake_ami
 
 load_dotenv()
@@ -56,6 +56,7 @@ def main(bake_after=False):
     copy_backend(public_ip)
     build_backend(public_ip)
     write_env(public_ip)
+    setup_metrics_cron(public_ip)
     setup_service(public_ip)
 
     ami_id = bake_ami(instance.id) if bake_after else None

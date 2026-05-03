@@ -7,6 +7,10 @@ from utils import ssh, state
 from src.modules.dynamo.table import TABLE_NAME as DYNAMO_TABLE_NAME
 from . import config
 
+# Resolved once at import time so rsync and SCP can find the file
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_SCRIPTS_DIR = os.path.normpath(os.path.join(_HERE, "..", "..", "..", "scripts"))
+
 
 def install_node(ip):
     """Install Node.js 22 via NodeSource. Binary lands at /usr/bin/node."""
@@ -73,9 +77,41 @@ def write_env(ip):
     ssh.run(ip, config.PEM_FILE, "test -s ~/app/.env || (echo '.env is empty or missing' && exit 1)")
 
 
+def setup_metrics_cron(ip):
+    """Copy metrics.sh to the instance and register it as a per-minute cron job."""
+    print("5/6 Setting up CloudWatch metrics cron...")
+    local_script = os.path.join(_SCRIPTS_DIR, "metrics.sh")
+    if not os.path.isfile(local_script):
+        raise RuntimeError(f"metrics.sh not found at {local_script}")
+
+    try:
+        subprocess.run(
+            [
+                "scp", "-i", config.PEM_FILE,
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                local_script,
+                f"ec2-user@{ip}:~/metrics.sh",
+            ],
+            check=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"scp of metrics.sh failed (exit {e.returncode})") from None
+
+    ssh.run(ip, config.PEM_FILE, "chmod +x ~/metrics.sh")
+    # cronie is not installed by default on Amazon Linux 2023
+    ssh.run(ip, config.PEM_FILE, "sudo yum install -y cronie && sudo systemctl enable crond && sudo systemctl start crond")
+    # Idempotent: strip any existing metrics.sh entry then re-add
+    ssh.run(ip, config.PEM_FILE, (
+        "(crontab -l 2>/dev/null | grep -v 'metrics.sh'; "
+        "echo '* * * * * /home/ec2-user/metrics.sh >> /home/ec2-user/devops2-metrics.log 2>&1') | crontab -"
+    ))
+    print("  metrics cron: installed (runs every minute)")
+
+
 def setup_service(ip):
     """Install a systemd unit so the backend starts automatically on boot."""
-    print("5/5 Setting up systemd service...")
+    print("6/6 Setting up systemd service...")
     unit = "\n".join([
         "[Unit]",
         "Description=DevOps2 node backend",

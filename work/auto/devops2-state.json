@@ -1,14 +1,20 @@
 {
-  "master_instance_id": "i-001ecf47b7a80f263",
+  "master_instance_id": "i-0eb5e6091a5fd070b",
   "master_sg_id": "sg-037893b853eedc83d",
-  "master_public_ip": "98.93.11.212",
+  "master_public_ip": "3.208.22.1",
   "key_name": "devops2-key",
   "pem_file": "devops2-key.pem",
   "dynamo_table": "devops-nodes",
-  "ami_id": "ami-085d6175714c48fd5",
-  "ami_name": "kc-2026-05-03-163327",
+  "ami_id": "ami-065396de06e8723c4",
+  "ami_name": "kc-2026-05-03-220607",
   "redis_cluster_id": "devops2-redis",
   "redis_sg_id": "sg-0a3eaf3b61b9ff975",
   "redis_endpoint": "devops2-redis.aw5mwn.0001.use1.cache.amazonaws.com",
-  "redis_url": "redis://devops2-redis.aw5mwn.0001.use1.cache.amazonaws.com:6379"
+  "redis_url": "redis://devops2-redis.aw5mwn.0001.use1.cache.amazonaws.com:6379",
+  "frontend_bucket": "kc-devops2-230xpd",
+  "frontend_url": "http://kc-devops2-230xpd.s3-website-us-east-1.amazonaws.com",
+  "cf_stack_name": "devops2-stack",
+  "alb_dns": "devops2-alb-1424726912.us-east-1.elb.amazonaws.com",
+  "asg_name": "devops2-asg",
+  "app_sg_id": "sg-06d6a1f1fbe5cd189"
 }
