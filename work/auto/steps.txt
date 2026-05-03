@@ -1,3 +1,12 @@
 set up aws creds:
-rm ~/.aws/credentials
-nano ~/.aws/credentials
+  rm ~/.aws/credentials
+  nano ~/.aws/credentials
+
+run order:
+  1. python 02_create_dynamo.py         # create DynamoDB table 
+  2. python 01_create_master.py         # provision EC2, copy backend, build, wire systemd
+  3. python 01_create_master.py --bake  # bake AMI when happy with the instance
+
+teardown and re-run:
+  python teardown_ec2s.py               # terminate instance + delete SG, clears state
+  python 01_create_master.py            # fresh provision

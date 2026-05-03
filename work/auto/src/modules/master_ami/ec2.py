@@ -90,7 +90,7 @@ def create_security_group(vpc_id):
 
 
 def launch_instance(key_name, sg_id):
-    """Launch a tagged master instance into the default VPC."""
+    """Launch a tagged master instance with the Academy IAM profile attached."""
     resource = aws.ec2_resource()
     instances = resource.create_instances(
         ImageId=config.BASE_AMI,
@@ -99,6 +99,8 @@ def launch_instance(key_name, sg_id):
         InstanceType=config.INSTANCE_TYPE,
         KeyName=key_name,
         SecurityGroupIds=[sg_id],
+        # LabInstanceProfile grants DynamoDB + CloudWatch access via instance metadata
+        IamInstanceProfile={"Name": "LabInstanceProfile"},
         TagSpecifications=[{
             "ResourceType": "instance",
             "Tags": [{"Key": "Name", "Value": "devops2-master"}],

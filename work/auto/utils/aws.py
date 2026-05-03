@@ -12,3 +12,8 @@ def ec2_client():
 def ec2_resource():
     """Return a boto3 EC2 resource for the configured region."""
     return boto3.resource("ec2", region_name=REGION)
+
+
+def dynamo_client():
+    """Return a boto3 DynamoDB client for the configured region."""
+    return boto3.client("dynamodb", region_name=REGION)

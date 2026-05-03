@@ -1,7 +1,8 @@
 {
-  "master_instance_id": "i-038be14daf47c3955",
-  "master_sg_id": "sg-0311fc56cddda3f0f",
-  "master_public_ip": "100.27.229.164",
+  "master_instance_id": "i-0c7a734a8f8c36118",
+  "master_sg_id": "sg-08bbe8bdae8ca8f9f",
+  "master_public_ip": "54.204.90.13",
   "key_name": "devops2-key",
-  "pem_file": "devops2-key.pem"
+  "pem_file": "devops2-key.pem",
+  "dynamo_table": "devops-nodes"
 }

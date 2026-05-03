@@ -3,7 +3,8 @@ import os
 import subprocess
 import time
 
-from utils import ssh
+from utils import ssh, state
+from src.modules.dynamo.table import TABLE_NAME as DYNAMO_TABLE_NAME
 from . import config
 
 
@@ -53,11 +54,13 @@ def build_backend(ip):
 def write_env(ip):
     """Write base env vars to ~/app/.env. Instance-specific values come from the launch template."""
     print("4/5 Writing .env...")
+    # Pull table name from state if 02_create_dynamo ran first, fall back to the module constant
+    dynamo_table = state.get("dynamo_table") or DYNAMO_TABLE_NAME
     content = "\n".join([
         f"PORT={config.APP_PORT}",
         "HOST=0.0.0.0",
         f"AWS_REGION={config.REGION}",
-        "DYNAMO_TABLE_NODES=devops-nodes",
+        f"DYNAMO_TABLE_NODES={dynamo_table}",
         "FASTIFY_REQUEST_TIMEOUT_MS=300000",
         "FASTIFY_CONNECTION_TIMEOUT_MS=300000",
         # REDIS_URL and EC2_* are injected at boot by the launch template user data
