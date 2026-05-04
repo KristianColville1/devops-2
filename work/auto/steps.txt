@@ -3,16 +3,16 @@ set up aws creds:
   nano ~/.aws/credentials
 
 run order:
-  1. python 02_create_dynamo.py         # create DynamoDB table first so backend can be wired to it
-  2. python 01_create_master.py         # provision EC2, copy backend, build, wire systemd
-  3. python 03_create_elasticache.py    # create Redis cluster, wires REDIS_URL into master
-  4. python 01_create_master.py --bake  # bake AMI once master is stable
-  5. python 05_deploy_cloudformation.py # deploy ALB + ASG + step scaling via CloudFormation
-  6. python 04_deploy_frontend.py       # rebuild frontend with ALB DNS as VITE_API_URL, upload to S3
+  1. python 02_create_dynamo.py                # create DynamoDB table first so backend can be wired to it
+  2. python 01_create_master.py                # provision EC2, copy backend, build, wire systemd
+  3. python 03_create_elasticache.py           # create Redis cluster, wires REDIS_URL into master
+  4. python 01_create_master.py --bake         # bake AMI once master is stable
+  5. python 05_deploy_cloudformation.py        # deploy ALB + ASG + step scaling via CloudFormation
+  6. python 04_deploy_frontend.py              # rebuild frontend with ALB DNS as VITE_API_URL, upload to S3
 
 teardown and re-run:
-  python teardown_ec2s.py               # terminate instance + delete SG, clears state
-  python 01_create_master.py            # fresh provision
-  python 05_deploy_cloudformation --refresh # refresh ASG instances with new AMI
+  python teardown_ec2s.py                      # terminate instance + delete SG, clears state
+  python 01_create_master.py                   # fresh provision
+  python 05_deploy_cloudformation --refresh    # refresh ASG instances with new AMI
 
 

@@ -1,10 +1,9 @@
 """
-Deploy the CloudFormation stack (ALB + ASG + HTTPS + step scaling).
-Reads all values from state: ami_id, redis_url, vpc/subnet IDs, certificate ARN.
+Deploy the CloudFormation stack (ALB + ASG + step scaling).
+Reads all values from state: ami_id, redis_url, vpc/subnet IDs.
 
 Run after:
   00_create_vpc.py             (vpc + subnets in state)
-  00_create_certificate.py     (certificate_arn in state)
   01_create_master.py --bake   (ami_id in state)
   03_create_elasticache.py     (redis_url in state)
 
@@ -30,7 +29,7 @@ from src.modules.master_ami.config import (
 
 load_dotenv()
 
-STACK_NAME = "devops2-stack"
+STACK_NAME_BASE = "devops2-stack"
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "infra", "stack.yaml")
 
 _POLL_DELAY = 15
@@ -48,8 +47,9 @@ def _read_template():
 
 def _stack_status(cf):
     """Return current stack status string, or None if the stack doesn't exist."""
+    stack_name = state.get("cf_stack_name") or STACK_NAME_BASE
     try:
-        resp = cf.describe_stacks(StackName=STACK_NAME)
+        resp = cf.describe_stacks(StackName=stack_name)
         return resp["Stacks"][0]["StackStatus"]
     except ClientError as e:
         if "does not exist" in str(e):
@@ -76,7 +76,8 @@ def _wait_complete(cf, action):
 
 def _stack_outputs(cf):
     """Return a dict of OutputKey → OutputValue for the deployed stack."""
-    resp = cf.describe_stacks(StackName=STACK_NAME)
+    stack_name = state.get("cf_stack_name") or STACK_NAME_BASE
+    resp = cf.describe_stacks(StackName=stack_name)
     return {o["OutputKey"]: o["OutputValue"] for o in resp["Stacks"][0].get("Outputs", [])}
 
 
@@ -161,6 +162,11 @@ def deploy():
         print("Error: certificate_arn missing from state — run 00_create_certificate.py first")
         sys.exit(1)
 
+    # Use a stable, unique stack name per VPC to avoid collisions with old stacks
+    # (e.g. stuck in DELETE_FAILED from a previous tearup/teardown).
+    stack_name = state.get("cf_stack_name") or f"{STACK_NAME_BASE}-{vpc_id[-8:]}"
+    state.update(cf_stack_name=stack_name)
+
     print(f"  VPC:             {vpc_id}")
     print(f"  Public subnets:  {', '.join(pub_subnet_ids)}")
     print(f"  Private subnets: {', '.join(priv_subnet_ids)}")
@@ -187,12 +193,20 @@ def deploy():
 
     template_body = _read_template()
     cf = aws.cf_client()
-    current = _stack_status(cf)
+    current = None
+    try:
+        resp = cf.describe_stacks(StackName=stack_name)
+        current = resp["Stacks"][0]["StackStatus"]
+    except ClientError as e:
+        if "does not exist" in str(e):
+            current = None
+        else:
+            raise
 
     if current is None:
-        print(f"\nCreating stack: {STACK_NAME}...")
+        print(f"\nCreating stack: {stack_name}...")
         cf.create_stack(
-            StackName=STACK_NAME,
+            StackName=stack_name,
             TemplateBody=template_body,
             Parameters=params,
             Capabilities=["CAPABILITY_IAM"],
@@ -201,10 +215,10 @@ def deploy():
         _wait_complete(cf, "create")
 
     elif current.endswith("_COMPLETE"):
-        print(f"\nUpdating stack: {STACK_NAME} (current: {current})...")
+        print(f"\nUpdating stack: {stack_name} (current: {current})...")
         try:
             cf.update_stack(
-                StackName=STACK_NAME,
+                StackName=stack_name,
                 TemplateBody=template_body,
                 Parameters=params,
                 Capabilities=["CAPABILITY_IAM"],
@@ -226,7 +240,7 @@ def deploy():
     asg_name = outputs.get("AutoScalingGroupName", "")
     app_sg_id = outputs.get("AppSecurityGroupId", "")
 
-    state.update(cf_stack_name=STACK_NAME, alb_dns=alb_dns, asg_name=asg_name, app_sg_id=app_sg_id)
+    state.update(cf_stack_name=stack_name, alb_dns=alb_dns, asg_name=asg_name, app_sg_id=app_sg_id)
 
     # The Redis SG was created before CloudFormation and only allows the master SG.
     # ASG instances use AppSecurityGroup, so we need to add it to the Redis SG.

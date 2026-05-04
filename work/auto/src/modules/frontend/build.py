@@ -15,16 +15,19 @@ def build(api_url=None, dashboard_token=None):
     if not os.path.isdir(FRONTEND_PATH):
         raise RuntimeError(f"Frontend not found at {FRONTEND_PATH}")
 
-    # Prefer ALB DNS (port 80) over direct EC2 IP (port 3000)
+    # Prefer CloudFront URL → ALB DNS → master public IP (last resort)
     if not api_url:
-        alb = state.get("alb_dns")
-        ip  = state.get("master_public_ip")
-        if alb:
-            api_url = f"https://{alb}"
+        cf_url = state.get("cloudfront_url")
+        alb    = state.get("alb_dns")
+        ip     = state.get("master_public_ip")
+        if cf_url:
+            api_url = cf_url
+        elif alb:
+            api_url = f"http://{alb}"
         elif ip:
             api_url = f"http://{ip}:3000"
         else:
-            raise RuntimeError("No API URL — run 05_deploy_cloudformation.py or 01_create_master.py first")
+            raise RuntimeError("No API URL — run migrate_to_cloudfront.py or 05_deploy_cloudformation.py first")
 
     dashboard_token = dashboard_token or os.environ.get("DASHBOARD_TOKEN", "dev-token-change-me")
 

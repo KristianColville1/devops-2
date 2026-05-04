@@ -5,7 +5,7 @@ from botocore.exceptions import ClientError
 from utils import aws, state, ssh
 
 CLUSTER_ID = "devops2-redis"
-SUBNET_GROUP = "devops2-redis-subnets"
+SUBNET_GROUP_BASE = "devops2-redis-subnets"
 SG_NAME = "devops2-redis-sg"
 NODE_TYPE = "cache.t3.micro"
 PORT = 6379
@@ -28,22 +28,34 @@ def get_vpc_and_private_subnets():
     return vpc_id, [s["SubnetId"] for s in resp["Subnets"]]
 
 
-def ensure_subnet_group(subnet_ids):
+def subnet_group_name(vpc_id: str) -> str:
+    # ElastiCache subnet groups are global-per-account-per-region names, not scoped to a VPC.
+    # Include the VPC suffix to avoid collisions when tearing up multiple VPCs over time.
+    return f"{SUBNET_GROUP_BASE}-{vpc_id[-8:]}"
+
+
+def ensure_subnet_group(vpc_id, subnet_ids):
     """Create the ElastiCache subnet group if it doesn't exist."""
     client = aws.elasticache_client()
+    name = subnet_group_name(vpc_id)
     try:
-        client.describe_cache_subnet_groups(CacheSubnetGroupName=SUBNET_GROUP)
-        print(f"  subnet group: {SUBNET_GROUP} (already exists)")
+        resp = client.describe_cache_subnet_groups(CacheSubnetGroupName=name)
+        vpc = resp["CacheSubnetGroups"][0].get("VpcId")
+        if vpc and vpc != vpc_id:
+            raise RuntimeError(
+                f"Subnet group [{name}] belongs to a different VPC [{vpc}] than [{vpc_id}]"
+            )
+        print(f"  subnet group: {name} (already exists)")
         return
     except ClientError as e:
         if e.response["Error"]["Code"] != "CacheSubnetGroupNotFoundFault":
             raise
     client.create_cache_subnet_group(
-        CacheSubnetGroupName=SUBNET_GROUP,
+        CacheSubnetGroupName=name,
         CacheSubnetGroupDescription="devops2 ElastiCache subnets",
         SubnetIds=subnet_ids,
     )
-    print(f"  subnet group: {SUBNET_GROUP} created")
+    print(f"  subnet group: {name} created")
 
 
 def ensure_redis_sg(vpc_id):
@@ -98,7 +110,7 @@ def cluster_status():
         raise
 
 
-def create_cluster(sg_id):
+def create_cluster(vpc_id, sg_id):
     """Create a single-node Redis cluster."""
     client = aws.elasticache_client()
     client.create_cache_cluster(
@@ -106,7 +118,7 @@ def create_cluster(sg_id):
         Engine="redis",
         CacheNodeType=NODE_TYPE,
         NumCacheNodes=1,
-        CacheSubnetGroupName=SUBNET_GROUP,
+        CacheSubnetGroupName=subnet_group_name(vpc_id),
         SecurityGroupIds=[sg_id],
         Port=PORT,
     )
@@ -173,12 +185,12 @@ def ensure_cluster():
     vpc_id, subnet_ids = get_vpc_and_private_subnets()
 
     print(f"  VPC: {vpc_id}  |  subnets: {len(subnet_ids)} found")
-    ensure_subnet_group(subnet_ids)
+    ensure_subnet_group(vpc_id, subnet_ids)
     sg_id = ensure_redis_sg(vpc_id)
 
     if status is None:
         print(f"  creating cluster: {CLUSTER_ID}  ({NODE_TYPE})")
-        create_cluster(sg_id)
+        create_cluster(vpc_id, sg_id)
     else:
         print(f"  cluster exists, status: {status}")
 

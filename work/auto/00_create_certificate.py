@@ -39,14 +39,24 @@ def generate_cert(key_path, cert_path):
 
 
 def upload_to_iam(cert_path, key_path):
-    """Delete any existing cert with this name then upload the new one."""
+    """Upload a cert to IAM without requiring delete permissions.
+
+    Preference order:
+      1) Reuse an existing cert with CERT_NAME (if readable)
+      2) Upload a new cert with CERT_NAME (first run)
+      3) If CERT_NAME already exists but can't be reused, upload under a unique name
+    """
     iam = aws.iam_client()
 
+    # Try to reuse an existing cert (no delete needed).
     try:
-        iam.delete_server_certificate(ServerCertificateName=CERT_NAME)
-        print(f"  deleted existing IAM cert: {CERT_NAME}")
+        existing = iam.get_server_certificate(ServerCertificateName=CERT_NAME)
+        arn = existing["ServerCertificate"]["ServerCertificateMetadata"]["Arn"]
+        print(f"  reusing existing IAM cert: {CERT_NAME}")
+        return arn
     except ClientError as e:
-        if e.response["Error"]["Code"] != "NoSuchEntity":
+        code = e.response["Error"]["Code"]
+        if code not in ("NoSuchEntity", "AccessDenied", "AccessDeniedException"):
             raise
 
     with open(cert_path) as f:
@@ -54,8 +64,25 @@ def upload_to_iam(cert_path, key_path):
     with open(key_path) as f:
         private_key = f.read()
 
+    # First try uploading under the canonical name.
+    try:
+        resp = iam.upload_server_certificate(
+            ServerCertificateName=CERT_NAME,
+            CertificateBody=cert_body,
+            PrivateKey=private_key,
+        )
+        return resp["ServerCertificateMetadata"]["Arn"]
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code not in ("EntityAlreadyExists",):
+            raise
+
+    # If the name already exists but we couldn't reuse it (e.g. no Get permission),
+    # fall back to a unique name.
+    unique_name = f"{CERT_NAME}-{int(__import__('time').time())}"
+    print(f"  {CERT_NAME} already exists; uploading as: {unique_name}")
     resp = iam.upload_server_certificate(
-        ServerCertificateName=CERT_NAME,
+        ServerCertificateName=unique_name,
         CertificateBody=cert_body,
         PrivateKey=private_key,
     )

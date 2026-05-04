@@ -4,13 +4,12 @@ Each step is idempotent: if a resource already exists it is skipped automaticall
 
 Steps:
   1. VPC + subnets + NAT Gateway       (~5 min, NAT GW takes time)
-  2. TLS certificate → IAM             (~30 sec)
-  3. DynamoDB table                    (skipped if already exists)
-  4. Master EC2 + Node 22 + backend    (~4 min)
-  5. ElastiCache Redis cluster         (~5 min)
-  6. Bake AMI from master              (~3 min)
-  7. CloudFormation stack (ALB + ASG)  (~3 min)
-  8. React frontend → S3               (~1 min)
+  2. DynamoDB table                    (skipped if already exists)
+  3. Master EC2 + Node 22 + backend    (~4 min)
+  4. ElastiCache Redis cluster         (~5 min)
+  5. Bake AMI from master              (~3 min)
+  6. CloudFormation stack (ALB + ASG)  (~3 min)
+  7. CloudFront + frontend → S3        (~12 min, CF deployment takes time)
 
 If any step fails the script stops and prints which step to re-run from.
 Fix the issue and re-run tearup.py — completed steps will be skipped.

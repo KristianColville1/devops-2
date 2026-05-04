@@ -100,12 +100,17 @@ def upload_dist(bucket_name, dist_path):
 
 
 def website_url(bucket_name):
-    """Return the S3 static website endpoint URL."""
+    """Return the S3 static website endpoint URL (HTTP only)."""
     return f"http://{bucket_name}.s3-website-{aws.REGION}.amazonaws.com"
 
 
+def https_url(bucket_name):
+    """Return the S3 REST endpoint URL (HTTPS, uses Amazon's cert)."""
+    return f"https://{bucket_name}.s3.amazonaws.com/index.html"
+
+
 def deploy(dist_path, bucket_name=None):
-    """Create bucket, set policy, upload dist/, return website URL."""
+    """Create bucket, set policy, upload dist/, return (bucket_name, https_url)."""
     if not bucket_name:
         bucket_name = bucket_name_from_state() or f"{BUCKET_PREFIX}-{_random_suffix()}"
 
@@ -117,6 +122,6 @@ def deploy(dist_path, bucket_name=None):
     print(f"  uploading frontend...")
     upload_dist(bucket_name, dist_path)
 
-    url = website_url(bucket_name)
+    url = https_url(bucket_name)
     state.update(frontend_bucket=bucket_name, frontend_url=url)
     return bucket_name, url

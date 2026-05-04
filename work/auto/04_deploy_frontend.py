@@ -8,7 +8,7 @@ import sys
 
 from botocore.exceptions import ClientError
 
-from utils import aws
+from utils import aws, state
 from utils.dotenv import load_dotenv
 from src.modules.frontend.build import build
 from src.modules.frontend.s3 import deploy
@@ -38,9 +38,14 @@ def main():
         print(f"\nDeploy error: {e}")
         sys.exit(1)
 
+    alb = state.get("alb_dns")
     print(f"\nDone.")
     print(f"  bucket:  {bucket_name}")
     print(f"  url:     {url}")
+    if alb:
+        print(f"\n  IMPORTANT: before WSS works, visit this URL in your browser and")
+        print(f"  accept the self-signed certificate warning:")
+        print(f"    https://{alb}")
 
 
 if __name__ == "__main__":

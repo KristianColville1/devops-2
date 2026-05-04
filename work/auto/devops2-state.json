@@ -15,5 +15,21 @@
     "subnet-0a053936775127097"
   ],
   "public_rt_id": "rtb-06d2f5e669cf39afb",
-  "private_rt_id": "rtb-02019fc025f02a7f9"
+  "private_rt_id": "rtb-02019fc025f02a7f9",
+  "certificate_arn": "arn:aws:iam::748952705862:server-certificate/devops2-cert",
+  "master_instance_id": "i-026fa1e79a6ed90e2",
+  "master_sg_id": "sg-09b4202f30e2bcd10",
+  "master_public_ip": "54.221.118.64",
+  "redis_cluster_id": "devops2-redis",
+  "redis_sg_id": "sg-0d66d48f0fb2a4fae",
+  "redis_endpoint": "devops2-redis.aw5mwn.0001.use1.cache.amazonaws.com",
+  "redis_url": "redis://devops2-redis.aw5mwn.0001.use1.cache.amazonaws.com:6379",
+  "ami_id": "ami-0fccf6751e70926e1",
+  "ami_name": "kc-2026-05-04-112648",
+  "cf_stack_name": "devops2-stack-fc192ed9",
+  "alb_dns": "devops2-alb-1789309391.us-east-1.elb.amazonaws.com",
+  "asg_name": "devops2-asg",
+  "app_sg_id": "sg-0ca69449d0cc3f681",
+  "frontend_bucket": "kc-devops2-gmlz68",
+  "frontend_url": "https://kc-devops2-gmlz68.s3.amazonaws.com/index.html"
 }

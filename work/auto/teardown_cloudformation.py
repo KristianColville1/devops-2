@@ -16,14 +16,15 @@ from utils.dotenv import load_dotenv
 
 load_dotenv()
 
-STACK_NAME   = "devops2-stack"
+STACK_NAME_BASE   = "devops2-stack"
 _POLL_DELAY  = 15
 _POLL_RETRIES = 60  # 15 minutes
 
 
 def cf_status(cf):
+    stack_name = state.get("cf_stack_name") or STACK_NAME_BASE
     try:
-        return cf.describe_stacks(StackName=STACK_NAME)["Stacks"][0]["StackStatus"]
+        return cf.describe_stacks(StackName=stack_name)["Stacks"][0]["StackStatus"]
     except ClientError as e:
         if "does not exist" in str(e):
             return None
@@ -31,20 +32,21 @@ def cf_status(cf):
 
 
 def delete_cf_stack(cf):
+    stack_name = state.get("cf_stack_name") or STACK_NAME_BASE
     status = cf_status(cf)
 
     if status is None:
-        print(f"  stack {STACK_NAME}: not found — already deleted")
+        print(f"  stack {stack_name}: not found — already deleted")
         return True
 
     if status == "DELETE_IN_PROGRESS":
-        print(f"  stack {STACK_NAME}: deletion already in progress, continuing to wait...")
+        print(f"  stack {stack_name}: deletion already in progress, continuing to wait...")
     elif "FAILED" in status or "ROLLBACK" in status:
-        print(f"  stack {STACK_NAME}: status is {status}, attempting delete anyway...")
-        cf.delete_stack(StackName=STACK_NAME)
+        print(f"  stack {stack_name}: status is {status}, attempting delete anyway...")
+        cf.delete_stack(StackName=stack_name)
     else:
-        print(f"  deleting stack: {STACK_NAME}  (current: {status})")
-        cf.delete_stack(StackName=STACK_NAME)
+        print(f"  deleting stack: {stack_name}  (current: {status})")
+        cf.delete_stack(StackName=stack_name)
 
     print(f"  waiting for deletion", end="", flush=True)
     for i in range(_POLL_RETRIES):
