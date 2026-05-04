@@ -184,14 +184,17 @@ def deploy():
     dashboard_token = os.environ.get("DASHBOARD_TOKEN", DASHBOARD_TOKEN)
 
     params = [
-        {"ParameterKey": "AmiId",          "ParameterValue": ami_id},
-        {"ParameterKey": "KeyName",         "ParameterValue": KEY_NAME},
-        {"ParameterKey": "InstanceType",    "ParameterValue": INSTANCE_TYPE},
-        {"ParameterKey": "VpcId",           "ParameterValue": vpc_id},
-        {"ParameterKey": "SubnetIds",       "ParameterValue": ",".join(subnet_ids)},
-        {"ParameterKey": "RedisUrl",        "ParameterValue": redis_url},
-        {"ParameterKey": "DynamoTable",     "ParameterValue": dynamo_table},
-        {"ParameterKey": "DashboardToken",  "ParameterValue": dashboard_token},
+        {"ParameterKey": "AmiId",            "ParameterValue": ami_id},
+        {"ParameterKey": "KeyName",           "ParameterValue": KEY_NAME},
+        {"ParameterKey": "InstanceType",      "ParameterValue": INSTANCE_TYPE},
+        {"ParameterKey": "VpcId",             "ParameterValue": vpc_id},
+        {"ParameterKey": "SubnetIds",         "ParameterValue": ",".join(subnet_ids)},
+        {"ParameterKey": "RedisUrl",          "ParameterValue": redis_url},
+        {"ParameterKey": "DynamoTable",       "ParameterValue": dynamo_table},
+        {"ParameterKey": "DashboardToken",    "ParameterValue": dashboard_token},
+        {"ParameterKey": "MinInstances",      "ParameterValue": "2"},
+        {"ParameterKey": "DesiredInstances",  "ParameterValue": "2"},
+        {"ParameterKey": "MaxInstances",      "ParameterValue": "10"},
     ]
 
     template_body = _read_template()

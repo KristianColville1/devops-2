@@ -31,7 +31,7 @@ def create_table():
         AttributeDefinitions=[
             {"AttributeName": "instanceId", "AttributeType": "S"},
         ],
-        # PAY_PER_REQUEST keeps it within Academy limits — no capacity to manage
+        # PAY_PER_REQUEST keeps it within budget limits
         BillingMode="PAY_PER_REQUEST",
     )
 
@@ -73,7 +73,7 @@ def ensure_table():
         return
 
     if status is not None:
-        # Table exists but in a transitional state (CREATING, DELETING, etc.)
+        # Table exists but in a transitional state: CREATING, DELETING, etc
         print(f"  table: {TABLE_NAME} (status: {status}, waiting...)")
         wait_active()
         state.update(dynamo_table=TABLE_NAME)

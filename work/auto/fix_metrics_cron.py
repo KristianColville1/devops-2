@@ -1,8 +1,10 @@
 """
-Fix the metrics cron log path on all running ASG instances.
+Push the latest metrics.sh and fix the cron entry on all running ASG instances.
 Run once — no rebake needed. Targets every instance in devops2-asg.
 """
 
+import os
+import subprocess
 import sys
 from botocore.exceptions import ClientError
 from utils import aws, state
@@ -12,6 +14,8 @@ from utils import ssh
 load_dotenv()
 
 CRON_LINE = "* * * * * /home/ec2-user/metrics.sh >> /home/ec2-user/devops2-metrics.log 2>&1"
+_HERE = os.path.dirname(os.path.abspath(__file__))
+METRICS_SCRIPT = os.path.join(_HERE, "scripts", "metrics.sh")
 
 
 def get_asg_instances():
@@ -43,8 +47,24 @@ def get_asg_instances():
     return ips
 
 
+def push_script(instance_id, ip, pem):
+    subprocess.run(
+        [
+            "scp", "-i", pem,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            METRICS_SCRIPT,
+            f"ec2-user@{ip}:~/metrics.sh",
+        ],
+        check=True,
+    )
+    ssh.run(ip, pem, "chmod +x ~/metrics.sh")
+    print(f"    metrics.sh pushed")
+
+
 def fix_cron(instance_id, ip, pem):
     print(f"  {instance_id} ({ip})...")
+    push_script(instance_id, ip, pem)
     # Remove any old metrics.sh cron line and install the corrected one
     ssh.run(ip, pem, (
         f"(crontab -l 2>/dev/null | grep -v 'metrics.sh'; "
@@ -63,7 +83,7 @@ def main():
         fix_cron(instance_id, ip, pem)
 
     print("\nDone. Metrics will appear in CloudWatch within 2 minutes.")
-    print("Check logs on any instance with: cat ~/devops2-metrics.log")
+    print("Verify on any instance with: cat ~/devops2-metrics.log")
 
 
 if __name__ == "__main__":
