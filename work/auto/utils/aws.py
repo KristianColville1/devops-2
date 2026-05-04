@@ -37,3 +37,8 @@ def cf_client():
 def asg_client():
     """Return a boto3 Auto Scaling client for the configured region."""
     return boto3.client("autoscaling", region_name=REGION)
+
+
+def iam_client():
+    """Return a boto3 IAM client."""
+    return boto3.client("iam", region_name=REGION)

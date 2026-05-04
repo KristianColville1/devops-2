@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError
 from utils.dotenv import load_dotenv
 from utils import state, ssh
 from src.modules.master_ami import config
-from src.modules.master_ami.ec2 import get_default_vpc, create_key_pair, create_security_group, launch_instance
+from src.modules.master_ami.ec2 import get_vpc, create_key_pair, create_security_group, launch_instance
 from src.modules.master_ami.setup import install_node, copy_backend, build_backend, write_env, setup_metrics_cron, setup_service
 from src.modules.master_ami.ami import bake_ami
 
@@ -23,14 +23,17 @@ def main(bake_after=False):
     """Bring up the master instance and get the backend running end to end."""
     print(f"Region: {config.REGION}  |  AMI: {config.BASE_AMI}  |  Type: {config.INSTANCE_TYPE}\n")
 
-    vpc_id = get_default_vpc()
+    vpc_id = get_vpc()
     print(f"VPC: {vpc_id}")
+
+    # Place master in the first public subnet when using the custom VPC
+    subnet_id = (state.get("public_subnet_ids") or [None])[0]
 
     key_name = create_key_pair()
     sg_id = create_security_group(vpc_id)
 
     print("Launching master instance...")
-    instance = launch_instance(key_name, sg_id)
+    instance = launch_instance(key_name, sg_id, subnet_id=subnet_id)
     print(f"  instance: {instance.id} — waiting for running state...")
     instance.wait_until_running()
     instance.reload()

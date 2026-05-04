@@ -20,7 +20,7 @@ def build(api_url=None, dashboard_token=None):
         alb = state.get("alb_dns")
         ip  = state.get("master_public_ip")
         if alb:
-            api_url = f"http://{alb}"
+            api_url = f"https://{alb}"
         elif ip:
             api_url = f"http://{ip}:3000"
         else:

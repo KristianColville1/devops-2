@@ -2,20 +2,22 @@ import subprocess
 import time
 
 
-def run(ip, pem_file, cmd, check=True):
-    """Run a shell command on a remote instance via SSH, streaming output to the terminal."""
-    result = subprocess.run(
-        [
-            "ssh", "-i", pem_file,
-            "-o", "StrictHostKeyChecking=no",
-            # BatchMode=yes stops SSH hanging on unexpected prompts
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=10",
-            f"ec2-user@{ip}",
-            cmd,
-        ],
-        check=False,
-    )
+def run(ip, pem_file, cmd, check=True, jump_ip=None):
+    """Run a shell command on a remote instance via SSH, streaming output to the terminal.
+
+    jump_ip: if set, SSH through this host as a bastion (ProxyJump) — used for private-subnet instances.
+    """
+    args = [
+        "ssh", "-i", pem_file,
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=10",
+    ]
+    if jump_ip:
+        args += ["-o", f"ProxyJump=ec2-user@{jump_ip}"]
+    args += [f"ec2-user@{ip}", cmd]
+
+    result = subprocess.run(args, check=False)
     if check and result.returncode != 0:
         raise RuntimeError(f"Remote command failed (exit {result.returncode}): {cmd[:100]}")
     return result.returncode == 0

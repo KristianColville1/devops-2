@@ -19,7 +19,7 @@ METRICS_SCRIPT = os.path.join(_HERE, "scripts", "metrics.sh")
 
 
 def get_asg_instances():
-    """Return public IPs of all InService instances in the ASG."""
+    """Return (instance_id, private_ip) for all InService ASG instances."""
     asg_name = state.get("asg_name") or "devops2-asg"
     asg = aws.asg_client()
     ec2 = aws.ec2_client()
@@ -41,46 +41,53 @@ def get_asg_instances():
     ips = []
     for r in resp["Reservations"]:
         for inst in r["Instances"]:
-            ip = inst.get("PublicIpAddress")
+            # Instances are in private subnets — use private IP, jump via master
+            ip = inst.get("PrivateIpAddress")
             if ip:
                 ips.append((inst["InstanceId"], ip))
     return ips
 
 
-def push_script(instance_id, ip, pem):
-    subprocess.run(
-        [
-            "scp", "-i", pem,
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "BatchMode=yes",
-            METRICS_SCRIPT,
-            f"ec2-user@{ip}:~/metrics.sh",
-        ],
-        check=True,
-    )
-    ssh.run(ip, pem, "chmod +x ~/metrics.sh")
+def push_script(ip, pem, jump_ip=None):
+    scp_args = [
+        "scp", "-i", pem,
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "BatchMode=yes",
+    ]
+    if jump_ip:
+        scp_args += ["-o", f"ProxyJump=ec2-user@{jump_ip}"]
+    scp_args += [METRICS_SCRIPT, f"ec2-user@{ip}:~/metrics.sh"]
+    subprocess.run(scp_args, check=True)
+    ssh.run(ip, pem, "chmod +x ~/metrics.sh", jump_ip=jump_ip)
     print(f"    metrics.sh pushed")
 
 
-def fix_cron(instance_id, ip, pem):
-    print(f"  {instance_id} ({ip})...")
-    push_script(instance_id, ip, pem)
-    # Remove any old metrics.sh cron line and install the corrected one
+def fix_cron(instance_id, ip, pem, jump_ip=None):
+    label = f"{instance_id} ({ip})" + (f" via {jump_ip}" if jump_ip else "")
+    print(f"  {label}...")
+    push_script(ip, pem, jump_ip=jump_ip)
     ssh.run(ip, pem, (
         f"(crontab -l 2>/dev/null | grep -v 'metrics.sh'; "
         f"echo '{CRON_LINE}') | crontab -"
-    ))
+    ), jump_ip=jump_ip)
     print(f"    crontab updated")
 
 
 def main():
     pem = state.get("pem_file") or "devops2-key.pem"
+    # ASG instances are in private subnets — SSH via master as jump host
+    jump_ip = state.get("master_public_ip")
+    if not jump_ip:
+        print("Warning: master_public_ip not in state — will attempt direct SSH (may fail for private instances)")
+
     print("Finding InService ASG instances...")
     instances = get_asg_instances()
-    print(f"  found {len(instances)} instance(s)\n")
+    print(f"  found {len(instances)} instance(s)")
+    if jump_ip:
+        print(f"  using master {jump_ip} as SSH jump host\n")
 
     for instance_id, ip in instances:
-        fix_cron(instance_id, ip, pem)
+        fix_cron(instance_id, ip, pem, jump_ip=jump_ip)
 
     print("\nDone. Metrics will appear in CloudWatch within 2 minutes.")
     print("Verify on any instance with: cat ~/devops2-metrics.log")

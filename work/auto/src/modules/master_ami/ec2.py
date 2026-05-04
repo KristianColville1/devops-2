@@ -6,12 +6,16 @@ from utils import aws
 from . import config
 
 
-def get_default_vpc():
-    """Return the default VPC ID for the configured region."""
+def get_vpc():
+    """Return the VPC ID to use — custom VPC from state, or default VPC as fallback."""
+    from utils import state as _state
+    vpc_id = _state.get("vpc_id")
+    if vpc_id:
+        return vpc_id
     client = aws.ec2_client()
     vpcs = client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     if not vpcs["Vpcs"]:
-        raise RuntimeError(f"No default VPC found in {config.REGION}")
+        raise RuntimeError(f"No VPC found in {config.REGION} — run 00_create_vpc.py first")
     return vpcs["Vpcs"][0]["VpcId"]
 
 
@@ -89,21 +93,26 @@ def create_security_group(vpc_id):
     return sg_id
 
 
-def launch_instance(key_name, sg_id):
-    """Launch a tagged master instance with the Academy IAM profile attached."""
+def launch_instance(key_name, sg_id, subnet_id=None):
+    """Launch a tagged master instance with the Academy IAM profile attached.
+
+    subnet_id: place the instance in this specific subnet (required for custom VPC public subnet).
+    """
     resource = aws.ec2_resource()
-    instances = resource.create_instances(
+    kwargs = dict(
         ImageId=config.BASE_AMI,
         MinCount=1,
         MaxCount=1,
         InstanceType=config.INSTANCE_TYPE,
         KeyName=key_name,
         SecurityGroupIds=[sg_id],
-        # LabInstanceProfile grants DynamoDB + CloudWatch access via instance metadata
         IamInstanceProfile={"Name": "LabInstanceProfile"},
         TagSpecifications=[{
             "ResourceType": "instance",
             "Tags": [{"Key": "Name", "Value": "devops2-master"}],
         }],
     )
+    if subnet_id:
+        kwargs["SubnetId"] = subnet_id
+    instances = resource.create_instances(**kwargs)
     return instances[0]

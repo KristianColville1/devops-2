@@ -1,9 +1,10 @@
 """
-Deploy the CloudFormation stack (ALB + ASG + step scaling).
-Reads ami_id, redis_url, and pem details from state; queries the default VPC
-and its subnets automatically so you don't have to supply them by hand.
+Deploy the CloudFormation stack (ALB + ASG + HTTPS + step scaling).
+Reads all values from state: ami_id, redis_url, vpc/subnet IDs, certificate ARN.
 
 Run after:
+  00_create_vpc.py             (vpc + subnets in state)
+  00_create_certificate.py     (certificate_arn in state)
   01_create_master.py --bake   (ami_id in state)
   03_create_elasticache.py     (redis_url in state)
 
@@ -34,32 +35,6 @@ TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "infra", "stack.yaml")
 
 _POLL_DELAY = 15
 _POLL_RETRIES = 60  # up to 15 minutes
-
-
-# ---------------------------------------------------------------------------
-# VPC / subnet helpers
-# ---------------------------------------------------------------------------
-
-def _default_vpc_id():
-    """Return the default VPC ID for the configured region."""
-    resp = aws.ec2_client().describe_vpcs(
-        Filters=[{"Name": "isDefault", "Values": ["true"]}]
-    )
-    vpcs = resp["Vpcs"]
-    if not vpcs:
-        raise RuntimeError(f"No default VPC found in {aws.REGION}")
-    return vpcs[0]["VpcId"]
-
-
-def _public_subnets(vpc_id):
-    """Return all subnet IDs in the default VPC (all are public in Academy)."""
-    resp = aws.ec2_client().describe_subnets(
-        Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
-    )
-    ids = [s["SubnetId"] for s in resp["Subnets"]]
-    if len(ids) < 2:
-        raise RuntimeError(f"Need at least 2 subnets for ALB; found {len(ids)} in {vpc_id}")
-    return ids
 
 
 # ---------------------------------------------------------------------------
@@ -174,21 +149,34 @@ def deploy():
         print("Warning: redis_url not in state — REDIS_URL will be empty in instances")
         redis_url = ""
 
-    print("Discovering VPC and subnets...")
-    vpc_id = _default_vpc_id()
-    subnet_ids = _public_subnets(vpc_id)
-    print(f"  VPC:     {vpc_id}")
-    print(f"  subnets: {', '.join(subnet_ids)}")
+    vpc_id          = state.get("vpc_id")
+    pub_subnet_ids  = state.get("public_subnet_ids") or []
+    priv_subnet_ids = state.get("private_subnet_ids") or []
+    cert_arn        = state.get("certificate_arn")
 
-    dynamo_table = state.get("dynamo_table") or "devops-nodes"
+    if not vpc_id or len(pub_subnet_ids) < 2 or len(priv_subnet_ids) < 2:
+        print("Error: VPC/subnet IDs missing from state — run 00_create_vpc.py first")
+        sys.exit(1)
+    if not cert_arn:
+        print("Error: certificate_arn missing from state — run 00_create_certificate.py first")
+        sys.exit(1)
+
+    print(f"  VPC:             {vpc_id}")
+    print(f"  Public subnets:  {', '.join(pub_subnet_ids)}")
+    print(f"  Private subnets: {', '.join(priv_subnet_ids)}")
+    print(f"  Certificate:     {cert_arn}")
+
+    dynamo_table    = state.get("dynamo_table") or "devops-nodes"
     dashboard_token = os.environ.get("DASHBOARD_TOKEN", DASHBOARD_TOKEN)
 
     params = [
         {"ParameterKey": "AmiId",            "ParameterValue": ami_id},
         {"ParameterKey": "KeyName",           "ParameterValue": KEY_NAME},
         {"ParameterKey": "InstanceType",      "ParameterValue": INSTANCE_TYPE},
-        {"ParameterKey": "VpcId",             "ParameterValue": vpc_id},
-        {"ParameterKey": "SubnetIds",         "ParameterValue": ",".join(subnet_ids)},
+        {"ParameterKey": "VpcId",            "ParameterValue": vpc_id},
+        {"ParameterKey": "PublicSubnetIds",   "ParameterValue": ",".join(pub_subnet_ids)},
+        {"ParameterKey": "PrivateSubnetIds",  "ParameterValue": ",".join(priv_subnet_ids)},
+        {"ParameterKey": "CertificateArn",    "ParameterValue": cert_arn},
         {"ParameterKey": "RedisUrl",          "ParameterValue": redis_url},
         {"ParameterKey": "DynamoTable",       "ParameterValue": dynamo_table},
         {"ParameterKey": "DashboardToken",    "ParameterValue": dashboard_token},
@@ -248,8 +236,9 @@ def deploy():
     print(f"\nDone.")
     print(f"  ALB DNS:  {alb_dns}")
     print(f"  ASG:      {asg_name}")
-    print(f"\nNext: rebuild the frontend with VITE_API_URL=http://{alb_dns}")
-    print(f"      python 04_deploy_frontend.py")
+    print(f"\nNext: python 04_deploy_frontend.py")
+    print(f"      Frontend will use https://{alb_dns}")
+    print(f"      Accept the self-signed cert warning in the browser once.")
 
 
 # ---------------------------------------------------------------------------

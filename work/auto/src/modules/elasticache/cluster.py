@@ -11,22 +11,21 @@ NODE_TYPE = "cache.t3.micro"
 PORT = 6379
 
 
-def get_default_subnets(vpc_id):
-    """Return all default subnet IDs in the given VPC."""
-    client = aws.ec2_client()
-    resp = client.describe_subnets(
-        Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
-    )
-    return [s["SubnetId"] for s in resp["Subnets"]]
-
-
-def get_default_vpc():
-    """Return the default VPC ID."""
+def get_vpc_and_private_subnets():
+    """Return (vpc_id, subnet_ids) using private subnets from state, or default VPC as fallback."""
+    from utils import state as _state
+    vpc_id = _state.get("vpc_id")
+    private_subnets = _state.get("private_subnet_ids")
+    if vpc_id and private_subnets:
+        return vpc_id, private_subnets
+    # Fallback: default VPC with all subnets (no custom VPC created yet)
     client = aws.ec2_client()
     vpcs = client.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
     if not vpcs["Vpcs"]:
-        raise RuntimeError(f"No default VPC in {aws.REGION}")
-    return vpcs["Vpcs"][0]["VpcId"]
+        raise RuntimeError(f"No VPC found in {aws.REGION} — run 00_create_vpc.py first")
+    vpc_id = vpcs["Vpcs"][0]["VpcId"]
+    resp = client.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
+    return vpc_id, [s["SubnetId"] for s in resp["Subnets"]]
 
 
 def ensure_subnet_group(subnet_ids):
@@ -171,8 +170,7 @@ def ensure_cluster():
         update_master_env(redis_url)
         return redis_url
 
-    vpc_id = get_default_vpc()
-    subnet_ids = get_default_subnets(vpc_id)
+    vpc_id, subnet_ids = get_vpc_and_private_subnets()
 
     print(f"  VPC: {vpc_id}  |  subnets: {len(subnet_ids)} found")
     ensure_subnet_group(subnet_ids)
